@@ -28,16 +28,6 @@ jobs:
 
       - name: Find Android project
         run: |
-          echo "Searching for Gradle project..."
-          find project -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Build APK
-        run: |
           PROJECT_DIR=$(find project -name "settings.gradle" -o -name "settings.gradle.kts" | head -1 | xargs dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
@@ -45,10 +35,43 @@ jobs:
             exit 1
           fi
 
-          echo "Android project: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
 
-          gradle assembleDebug --no-daemon
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Fix Java and Kotlin JVM targets
+        run: |
+          cat > fix.gradle <<'EOF'
+          allprojects {
+              tasks.withType(JavaCompile).configureEach {
+                  sourceCompatibility = "17"
+                  targetCompatibility = "17"
+              }
+
+              tasks.matching {
+                  it.name.startsWith("compile") && it.name.endsWith("Kotlin")
+              }.configureEach {
+                  try {
+                      kotlinOptions.jvmTarget = "17"
+                  } catch (Exception ignored) {
+                  }
+              }
+          }
+          EOF
+
+      - name: Build APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          gradle -I "$GITHUB_WORKSPACE/fix.gradle" assembleDebug --no-daemon -Pkotlin.jvm.target.validation.mode=warning
+
+      - name: Find APK
+        run: |
+          echo "Searching for APK..."
+          find "$PROJECT_DIR" -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -56,3 +79,4 @@ jobs:
           name: Tajeeri-APK
           path: |
             project/**/build/outputs/apk/**/*.apk
+          if-no-files-found: error
