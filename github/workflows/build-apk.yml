@@ -29,12 +29,10 @@ jobs:
       - name: Find Gradle project
         run: |
           GRADLEW=$(find project -name gradlew -type f | head -1)
-
           if [ -z "$GRADLEW" ]; then
             echo "gradlew not found"
             exit 1
           fi
-
           chmod +x "$GRADLEW"
           echo "GRADLEW=$GRADLEW" >> "$GITHUB_ENV"
           echo "PROJECT_DIR=$(dirname "$GRADLEW")" >> "$GITHUB_ENV"
