@@ -1,17 +1,17 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -20,46 +20,39 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install unzip
-        run: sudo apt-get update && sudo apt-get install -y unzip
-
       - name: Extract Android project
         run: |
           rm -rf project
           mkdir project
-          unzip -o tajeeri_android_native_v1.zip -d project
+          unzip -q tajeeri_android_native_v1.zip -d project
 
       - name: Find Android project
         run: |
-          echo "Searching for Gradle wrapper..."
-          find project -name "gradlew" -type f
+          echo "Searching for Gradle project..."
+          find project -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Build APK
         run: |
-          GRADLEW=$(find project -name "gradlew" -type f | head -n 1)
+          PROJECT_DIR=$(find project -name "settings.gradle" -o -name "settings.gradle.kts" | head -1 | xargs dirname)
 
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: gradlew was not found inside the ZIP"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Android Gradle project not found"
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$GRADLEW")
-
-          echo "Gradle wrapper: $GRADLEW"
-          echo "Project directory: $PROJECT_DIR"
-
-          chmod +x "$GRADLEW"
+          echo "Android project: $PROJECT_DIR"
           cd "$PROJECT_DIR"
 
-          ./gradlew assembleDebug --no-daemon
-
-      - name: Find APK
-        run: |
-          echo "Searching for APK..."
-          find project -type f -name "*.apk"
+          gradle assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Tajeeri-APK
-          path: project/**/build/outputs/apk/**/*.apk
+          path: |
+            project/**/build/outputs/apk/**/*.apk
